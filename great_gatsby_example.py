@@ -6,11 +6,11 @@ import json
 from jsonformer_claude.main import JsonformerClaude
 
 api_key = os.environ["ANTHROPIC"]
-client = anthropic.Client(api_key)
+client = anthropic.Anthropic(api_key=api_key)
 GENERATION_MARKER = "|GENERATION|"
 
 
-async def main():
+def main():
     # Fetch "The Great Gatsby" text from the URL
     url = "http://gutenberg.net.au/ebooks02/0200041.txt"
     response = requests.get(url)
@@ -40,8 +40,8 @@ async def main():
         debug=True,
     )
 
-    print(json.dumps(await gen_json(), indent=2))
+    print(json.dumps(gen_json(), indent=2))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

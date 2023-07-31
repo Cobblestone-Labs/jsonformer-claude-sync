@@ -8,11 +8,7 @@ from jsonformer_claude.fields.string import StrField
 from termcolor import cprint
 import json
 
-FIELDS = {
-    "number": IntField,
-    "boolean": BoolField,
-    "string": StrField
-}
+FIELDS = {"number": IntField, "boolean": BoolField, "string": StrField}
 
 
 class JsonformerClaude:
@@ -24,7 +20,7 @@ class JsonformerClaude:
 
     def __init__(
         self,
-        anthropic_client: anthropic.Client,
+        anthropic_client: anthropic.Anthropic,
         json_schema: Dict[str, Any],
         prompt: str,
         debug: bool = False,
@@ -47,17 +43,23 @@ class JsonformerClaude:
                 cprint(caller, "green", end=" ")
                 cprint(value, "blue")
 
-    async def _completion(self, prompt: str):
+    def _completion(self, prompt: str):
         self.debug("[completion] hitting anthropic", prompt)
+        last_anthropic_completion = ""
         self.last_anthropic_response_finished = False
-        stream = await self.anthropic_client.acompletion_stream(
+        stream = self.anthropic_client.completions.create(
             prompt=prompt,
             stop_sequences=[anthropic.HUMAN_PROMPT],
+            stream=True,
             **self.claude_args,
         )
         self.llm_request_count += 1
-        async for response in stream:
-            self.last_anthropic_response = prompt + response["completion"]
+        for response in stream:
+            self.debug(f"[response-object]", response)
+            last_anthropic_completion = last_anthropic_completion + response.completion
+            self.debug("[last-anthropic-completion]", last_anthropic_completion)
+
+            self.last_anthropic_response = prompt + last_anthropic_completion
             assistant_index = self.last_anthropic_response.find(anthropic.AI_PROMPT)
             if assistant_index > -1:
                 self.last_anthropic_response = self.strip_json_spaces(
@@ -72,7 +74,7 @@ class JsonformerClaude:
         self.last_anthropic_stream = self._completion(prompt)
         return self.last_anthropic_stream
 
-    async def prefix_matches(self, progress) -> bool:
+    def prefix_matches(self, progress) -> bool:
         if self.last_anthropic_response is None:
             return False
         response = self.last_anthropic_response
@@ -80,7 +82,7 @@ class JsonformerClaude:
             len(progress) < len(response) or not self.last_anthropic_response_finished
         )
         while len(progress) >= len(response):
-            await self.last_anthropic_stream.__anext__()
+            self.last_anthropic_stream.__next__()
             response = self.last_anthropic_response
 
         result = response.startswith(progress)
@@ -97,22 +99,22 @@ class JsonformerClaude:
         self.debug("[prefix_matches]", result)
         return result
 
-    async def generate_object(
+    def generate_object(
         self, properties: Dict[str, Any], obj: Dict[str, Any]
     ) -> Dict[str, Any]:
         for key, schema in properties.items():
             self.debug("[generate_object] generating value for", key)
-            obj[key] = await self.generate_value(schema, obj, key)
+            obj[key] = self.generate_value(schema, obj, key)
         return obj
 
     def validate_ref(self, ref):
-        if not ref.startswith('#/'):
+        if not ref.startswith("#/"):
             raise ValueError("Ref must start with #/")
 
     def get_definition_by_ref(self, ref) -> dict:
         self.validate_ref(ref)
 
-        locations = ref.split('/')[1:]
+        locations = ref.split("/")[1:]
         definition = self.json_schema
         for location in locations:
             definition = definition.get(location)
@@ -122,7 +124,7 @@ class JsonformerClaude:
 
         return definition
 
-    async def get_stream(self):
+    def get_stream(self):
         progress = self.get_progress()
         prompt = self.get_prompt()
 
@@ -131,20 +133,19 @@ class JsonformerClaude:
 
         stream = self.last_anthropic_response
 
-        if not await self.prefix_matches(progress) or stream is None:
-
+        if not self.prefix_matches(progress) or stream is None:
             stream = self.completion(prompt)
         else:
             stream = self.last_anthropic_stream
 
         return stream
 
-    async def generate_value(
+    def generate_value(
         self,
         schema: Dict[str, Any],
         obj: Union[Dict[str, Any], List[Any]],
         key: Union[str, None] = None,
-        retries: int = 0
+        retries: int = 0,
     ) -> Any:
         if retries > 5:
             self.debug("[completion] EXCEEDED RETRIES RETURNING NONE", str(retries))
@@ -157,15 +158,16 @@ class JsonformerClaude:
                 schema=schema,
                 obj=obj,
                 key=key,
-                generation_marker=self.generation_marker
+                generation_marker=self.generation_marker,
             )
             field.insert_generation_marker()
 
-            stream = await self.get_stream()
+            stream = self.get_stream()
 
-            async for completion in stream:
+            for completion in stream:
                 progress = self.get_progress()
-                completion = completion[len(progress):]
+                self.debug("[JACK]: PROGRESS", progress)
+                completion = completion[len(progress) :]
                 self.debug("[completion]", completion)
                 field_return = field.generate_value(completion)
                 self.debug("[completion]", field_return)
@@ -176,17 +178,14 @@ class JsonformerClaude:
                     self.debug("[completion]", "retrying")
                     self.completion(self.get_prompt())
                     # Could do things like change temperature here
-                    return await self.generate_value(
-                        schema=schema,
-                        obj=obj,
-                        key=key,
-                        retries=retries + 1
+                    return self.generate_value(
+                        schema=schema, obj=obj, key=key, retries=retries + 1
                     )
 
         elif schema_type == "array":
             new_array = []
             obj[key] = new_array
-            return await self.generate_array(schema["items"], new_array)
+            return self.generate_array(schema["items"], new_array)
 
         elif schema_type == "object":
             new_obj = {}
@@ -195,16 +194,13 @@ class JsonformerClaude:
             else:
                 obj.append(new_obj)
 
-            return await self.generate_object(schema["properties"], new_obj)
+            return self.generate_object(schema["properties"], new_obj)
 
         elif discriminator := schema.get("discriminator"):
             property_name = discriminator["propertyName"]
             mapping = discriminator["mapping"]
 
-            property_name_schema = {
-                "type": "string",
-                "enum": [m for m in mapping]
-            }
+            property_name_schema = {"type": "string", "enum": [m for m in mapping]}
 
             new_obj = {}
             new_obj[property_name] = self.generation_marker
@@ -214,25 +210,22 @@ class JsonformerClaude:
             else:
                 obj.append(new_obj)
 
-            property_enum_value = await self.generate_value(
-                schema=property_name_schema,
-                obj=new_obj,
-                key=property_name
+            property_enum_value = self.generate_value(
+                schema=property_name_schema, obj=new_obj, key=property_name
             )
             new_obj[property_name] = property_enum_value
 
-            #new_obj.pop(property_name)
+            # new_obj.pop(property_name)
 
             self.debug("[discriminator]", property_enum_value)
 
             schema = self.get_definition_by_ref(mapping[property_enum_value])
             self.debug("[discriminator]", schema)
-            return await self.generate_object(properties=schema["properties"], obj=new_obj)
-
+            return self.generate_object(properties=schema["properties"], obj=new_obj)
 
         elif ref := schema.get("$ref"):
             definition = self.get_definition_by_ref(ref)
-            return await self.generate_value(
+            return self.generate_value(
                 schema=definition,
                 obj=obj,
                 key=key,
@@ -241,14 +234,12 @@ class JsonformerClaude:
         else:
             raise ValueError(f"Unsupported schema type: {schema_type}")
 
-    async def generate_array(
-        self, item_schema: Dict[str, Any], arr: List[Any]
-    ) -> List[Any]:
+    def generate_array(self, item_schema: Dict[str, Any], arr: List[Any]) -> List[Any]:
         while True:
             if self.last_anthropic_response is None:
                 # todo: below is untested since we do not support top level arrays yet
                 stream = self.completion(self.get_prompt())
-                async for response in stream:
+                for response in stream:
                     completion = response[len(self.get_progress()) :]
                     if completion and completion[0] == ",":
                         self.last_anthropic_response = completion[1:]
@@ -260,13 +251,13 @@ class JsonformerClaude:
                 progress = progress.rstrip(",")
                 response = self.last_anthropic_response
                 while len(progress) >= len(response):
-                    await self.last_anthropic_stream.__anext__()
+                    self.last_anthropic_stream.__next__()
                     response = self.last_anthropic_response
                 next_char = response[len(progress)]
                 if next_char == "]":
                     return arr
 
-            value = await self.generate_value(item_schema, arr)
+            value = self.generate_value(item_schema, arr)
             arr[-1] = value
 
     def strip_json_spaces(self, json_string: str) -> str:
@@ -308,10 +299,10 @@ class JsonformerClaude:
         )
         return prompt.rstrip()
 
-    async def __call__(self) -> Dict[str, Any]:
+    def __call__(self) -> Dict[str, Any]:
         self.llm_request_count = 0
         self.value = {}
-        generated_data = await self.generate_object(
+        generated_data = self.generate_object(
             self.json_schema["properties"], self.value
         )
         return generated_data
