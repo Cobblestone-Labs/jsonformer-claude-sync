@@ -79,7 +79,7 @@ Jsonformer Claude was able to generate detailed structured JSON data for the maj
 ## Installation
 
 ```bash
-pip install jsonformer-claude
+poetry add git+https://github.com/Cobblestone-Labs/jsonformer-claude-sync.git
 ```
 
 ## Development
