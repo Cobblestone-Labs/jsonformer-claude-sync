@@ -1,3 +1,5 @@
+`Note, synchronous fork: This repo was cloned from jsonformer-claude, but removed any dependence on asyncio, and upgraded the anthropic client version to 0.3.7, enabling streaming updates by their diffs instead of retransmitting the entire completion every time a new token is generated.`
+
 # Jsonformer Claude: Generate Schema-conforming Structured JSON from Anthropic's Claude Model
 
 Generating structured JSON from language models can be a challenging task. The generated JSON must be syntactically correct and follow a schema that specifies the structure of the JSON.
@@ -28,7 +30,6 @@ Jsonformer Claude currently supports a subset of JSON Schema. Below is a list of
 ## Example Usage: The Great Gatsby
 
 ```python
-import asyncio
 import anthropic
 
 from jsonformer_claude.main import JsonformerClaude
@@ -53,7 +54,7 @@ gen_json = JsonformerClaude(
 )
 
 # Generate structured JSON data representing main characters in "The Great Gatsby"
-generated_data = await gen_json()
+generated_data = gen_json()
 
 print(generated_data)
 ```
