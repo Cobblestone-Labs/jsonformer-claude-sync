@@ -8,11 +8,23 @@ class StrField(BaseField):
 
         return val in self.schema["enum"]
 
+    def reject_value(self, val: str) -> bool:
+        whitespace_shifted = val.lstrip()
+        if len(whitespace_shifted) < 1:
+            return False
+
+        return whitespace_shifted[0] != '"'
+
     def get_value(self, stream: str) -> str | None:
-        if len(stream) < 2:
+        whitespace_shifted_stream = stream.lstrip()
+        if len(whitespace_shifted_stream) < 2:
             return None
 
-        if stream[0] == '"' and '"' in stream[1:]:
-            return stream.split('"')[1]
+        if whitespace_shifted_stream[0] == '"' and '"' in whitespace_shifted_stream[1:]:
+            split_string = whitespace_shifted_stream.split('"')[1]
+            print(f">>> RETURNING SPLIT STRING: {split_string}", flush=True)
+            return split_string
+        else:
+            print(f">>> STREAM NOT COMPLETE: '{whitespace_shifted_stream}'", flush=True)
 
         return None

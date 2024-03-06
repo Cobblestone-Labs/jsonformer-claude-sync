@@ -5,3 +5,4 @@ dist
 .DS_Store
 jsonformer_claude/__pycache__
 *~
+.env.sh

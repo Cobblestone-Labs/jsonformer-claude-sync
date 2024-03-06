@@ -1,15 +1,16 @@
 import asyncio
 import anthropic
+import os
 
 from jsonformer_claude.main import JsonformerClaude
 
 api_key = os.environ["ANTHROPIC"]
 
-client = anthropic.Client(api_key)
+client = anthropic.Client(api_key=api_key)
 GENERATION_MARKER = "|GENERATION|"
 
 
-async def main():
+def main():
     gen_json = JsonformerClaude(
         anthropic_client=client,
         max_tokens_to_sample=500,
@@ -104,11 +105,11 @@ async def main():
         debug=True,
     )
 
-    print(await gen_json())
+    print(gen_json())
 
     # print gen_json.llm_request_count
     print("request count", gen_json.llm_request_count)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

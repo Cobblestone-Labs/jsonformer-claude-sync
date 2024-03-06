@@ -4,15 +4,17 @@ from typing import Any
 from dataclasses import dataclass
 
 
-
 @dataclass
 class FieldResponse:
     value_found: bool
     value_valid: bool
     value: Any | None
+    value_rejected: bool = (
+        False  # Not only is the value invalid, but we should start over.
+    )
 
 
-class BaseField():
+class BaseField:
     schema = None
     end_tokens = [",", "}"]
     obj = None
@@ -50,28 +52,24 @@ class BaseField():
     def validate_value(self, val: str) -> bool:
         return True
 
+    def reject_value(self, val: str) -> bool:
+        return False
+
     def postprocess_value(self, val: str) -> Any:
         return val
 
     def generate_value(self, stream: str) -> Any:
         value = self.get_value(stream=stream)
+        stream_is_rejected = self.reject_value(val=stream)
 
-        if value is not None and self.validate_value(val=value):
+        if stream_is_rejected:
+            return FieldResponse(
+                value_found=False, value_valid=False, value=value, value_rejected=True
+            )
+        elif value is not None and self.validate_value(val=value):
             value = self.postprocess_value(val=value)
-            return FieldResponse(
-                value_found=True,
-                value_valid=True,
-                value=value
-            )
+            return FieldResponse(value_found=True, value_valid=True, value=value)
         elif value is not None and not self.validate_value(val=value):
-            return FieldResponse(
-                value_found=True,
-                value_valid=False,
-                value=value
-            )
+            return FieldResponse(value_found=True, value_valid=False, value=value)
 
-        return FieldResponse(
-            value_found=False,
-            value_valid=False,
-            value=None
-        )
+        return FieldResponse(value_found=False, value_valid=False, value=None)

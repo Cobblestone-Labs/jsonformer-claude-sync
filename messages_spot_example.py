@@ -3,7 +3,7 @@ import os
 import anthropic
 import requests
 import json
-from jsonformer_claude.main import JsonformerClaude
+from jsonformer_claude.messages_api import JsonformerClaudeMessages
 
 api_key = os.environ["ANTHROPIC"]
 client = anthropic.Anthropic(api_key=api_key)
@@ -18,10 +18,12 @@ def main():
 
     text = "Spot is a little brown dog who lives in Stuytown with his family, Jack & Angie. He loves to play with his toys and go for walks in the park. He is a very good"
 
-    gen_json = JsonformerClaude(
+    gen_json = JsonformerClaudeMessages(
         anthropic_client=client,
-        max_tokens_to_sample=2000,
-        model="claude-v1",
+        # max_tokens_to_sample=2000,
+        max_tokens=2000,
+        model="claude-3-sonnet-20240229",
+        # model="claude-3-opus-20240229",
         json_schema={
             "type": "object",
             "properties": {
@@ -46,4 +48,5 @@ def main():
 
 
 if __name__ == "__main__":
+    # print(f">>> DIR CLIENT: {client._version} -- {dir(client)}")
     main()
